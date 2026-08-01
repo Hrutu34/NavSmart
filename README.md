@@ -7,25 +7,33 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-2.0-00ff9d?style=for-the-badge&logo=fastapi&logoColor=black)](https://fastapi.tiangolo.com/)
 [![Google Maps](https://img.shields.io/badge/Google%20Maps-API-a855f7?style=for-the-badge&logo=googlemaps&logoColor=white)](https://developers.google.com/maps)
 [![Ollama](https://img.shields.io/badge/Ollama-LLaMA%203.2-ff0055?style=for-the-badge&logo=ollama&logoColor=white)](https://ollama.ai/)
-[![OpenAI](https://img.shields.io/badge/OpenAI-GPT--4o-00f3ff?style=for-the-badge&logo=openai&logoColor=black)](https://openai.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
+[![Gemini](https://img.shields.io/badge/Gemini-2.5-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev/)
 
 <p align="center">
-  <b>NavSmart</b> is a futuristic, full-stack AI navigation command center. It combines real-time streaming LLM intelligence, interactive map polyline plotting, dynamic multi-day itinerary generation, and voice speech-to-text input inside a glassmorphic cyber interface.
+  <b>NavSmart</b> is a simple LLM and python based navigation prototype. It combines real-time streaming LLM intelligence, interactive map polyline plotting, dynamic multi-day itinerary generation, and voice speech-to-text input inside a glassmorphic cyber interface.
 </p>
 
 </div>
 
 ---
 
-## 🌟 Key Features
+## Demo
+
+<p align="center">
+  <img src="app/assets/demo.gif" alt="Project Demo" width="900">
+</p>
+
+---
+
+## Key Features
 
 -**Futuristic Cyber HUD Interface:** Built with dark cybernetic glassmorphism, animated particle backgrounds, real-time status indicators, and glowing neon accents.
 -**Real-Time Dynamic Token Streaming:** Real-time typewriter response generation powered by WebSockets, formatted dynamically with Markdown rendering and glowing location highlights.
 -**Tactical Google Maps Integration:** Renders live driving routes, decodes polylines, plots start/end markers, and calculates real-time distance & duration metrics.
 -**Dynamic Itinerary Visualizer:** Transforms travel queries into structured, interactive day-by-day itinerary cards with activity checklists.
 -**Voice Speech-to-Text Input:** Built-in speech recognition with animated waveform indicators for hands-free navigation commands.
--**Dual LLM Engine (Ollama & OpenAI):** Switch seamlessly between local open-source models (Ollama `llama3.2:3b`) and cloud models (`gpt-4o-mini`). Includes intelligent fallback streaming.
+- **Dual LLM Engine (Ollama & Gemini):** Switch seamlessly between local open-source models (Ollama `llama3.2:3b`) and Google's Gemini models. Includes intelligent fallback streaming.
+
 
 ---
 
@@ -62,7 +70,7 @@ NavSmart/
 
 ## 🔑 Setting Up API Keys & Environment Variables
 
-NavSmart requires configuration for the **Google Maps API** and an **LLM Provider** (Ollama or OpenAI).
+NavSmart requires configuration for the **Google Maps API** and an **LLM Provider** (Ollama or Gemini).
 
 ### 1️⃣ Setting Up Google Maps API Key
 1. Go to the [Google Cloud Console](https://console.cloud.google.com/).
@@ -87,33 +95,53 @@ NavSmart supports two LLM options out of the box:
    ```
 3. Ensure Ollama is running locally at `http://127.0.0.1:11434`.
 
-#### Option B: OpenAI API (Cloud)
-1. Obtain an API Key from the [OpenAI Platform](https://platform.openai.com/api-keys).
-2. Set `LLM_PROVIDER=openai` and specify your `OPENAI_API_KEY` in `.env`.
+#### Option B: Google Gemini API (Cloud)
+1. Generate an API key from Google AI Studio.
+2. Set `LLM_PROVIDER=gemini`.
+3. Configure your `GEMINI_API_KEY` environment variable.
 
 ---
 
-### 3️⃣ Environment Variable Reference (`.env`)
+### 3️⃣ Configure Environment Variables
 
-Copy `.env.example` to create your local `.env` file:
-```bash
-cp .env.example .env
+Create a `.env` file in the project root (you may use `.env.example` as a reference if it is included) and manually configure the required environment variables with values specific to your environment.
+
+Example:
+
+```env
+GOOGLE_MAPS_API_KEY=your_google_maps_api_key
+
+LLM_PROVIDER=ollama
+
+# Ollama Configuration
+OLLAMA_HOST=http://127.0.0.1:11434
+OLLAMA_MODEL=llama3.2:3b
+
+# Gemini Configuration
+GEMINI_API_KEY=your_gemini_api_key
+GEMINI_MODEL=gemini-2.5-flash
+
+HOST=0.0.0.0
+PORT=8000
 ```
+
+Only configure the variables required for your selected LLM provider. If using Ollama, a Gemini API key is not required.
+
 
 | Variable | Description | Default Value |
 | :--- | :--- | :--- |
 | `GOOGLE_MAPS_API_KEY` | Google Maps JS & Directions API key | *Default Provided* |
-| `LLM_PROVIDER` | LLM backend (`ollama` or `openai`) | `ollama` |
+| `LLM_PROVIDER` | LLM backend (`ollama` or `gemini`) | `ollama` |
 | `OLLAMA_HOST` | Ollama local instance URL | `http://127.0.0.1:11434` |
 | `OLLAMA_MODEL` | Ollama model name | `llama3.2:3b` |
-| `OPENAI_API_KEY` | OpenAI API Key (Required if `LLM_PROVIDER=openai`) | *Optional* |
-| `OPENAI_MODEL` | OpenAI Model name | `gpt-4o-mini` |
+| `GEMINI_API_KEY` | Gemini API Key (Required if `LLM_PROVIDER=gemini`) | *Optional* |
+| `GEMINI_MODEL` | Gemini Model name | `gemini-3.6-flash` |
 | `HOST` | Host address for server binding | `0.0.0.0` |
 | `PORT` | Server port number | `8000` |
 
 ---
 
-## 🚀 Quick Start Installation Guide
+## Quick Start Installation Guide
 
 ### Prerequisites
 - Python 3.10 or higher
@@ -154,7 +182,7 @@ cp .env.example .env
 
 ---
 
-## 📡 API Endpoints Summary
+## API Endpoints Summary
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
@@ -169,9 +197,15 @@ cp .env.example .env
 
 ---
 
-## 👥 Credits & Team
+## Credits & Team
 
-Developed with ❤️ by **Team Nav-E-Gators**.
+Developed by **Team Nav-E-Gators** as part of **I.Mobilothon 2025** prototype.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+| Developer Name |
+| :--- |
+| Hrutu Surve |
+| Hariom Jangra |
+| Tanveer Sheikh |
+
+---
 

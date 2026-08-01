@@ -1,3 +1,4 @@
+import os
 import requests
 import polyline
 
@@ -33,5 +34,5 @@ def get_all_stop_points(start, stop, api_key):
 
     return poly_points
 
-api_key = "AIzaSyDDgJKSce1dwXMTZ886PDMqjaJrF9z1ErA"
+api_key = os.environ["GOOGLE_MAPS_API_KEY"]
 points = get_all_stop_points("Kolkata,IN", "Delhi,IN", api_key)

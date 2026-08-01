@@ -28,10 +28,7 @@ class Settings:
 
     # Google Maps API Key
     # Defaults to the provided key, but can be overridden via environment variable
-    GOOGLE_MAPS_API_KEY: str = os.getenv(
-        "GOOGLE_MAPS_API_KEY", 
-        "AIzaSyDDgJKSce1dwXMTZ886PDMqjaJrF9z1ErA"
-    )
+    GOOGLE_MAPS_API_KEY: str =  os.environ["GOOGLE_MAPS_API_KEY"]
 
     # LLM Settings
     LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "ollama").lower()  # 'ollama' or 'openai'

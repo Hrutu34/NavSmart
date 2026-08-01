@@ -294,24 +294,6 @@ body.cyber-theme {
     background-color: #0d1321;
 }
 
-/* HUD Scan Line across map */
-.scan-line {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 2px;
-    background: linear-gradient(90deg, transparent, var(--cyan-primary), transparent);
-    opacity: 0.4;
-    pointer-events: none;
-    animation: scanAnimation 8s linear infinite;
-}
-
-@keyframes scanAnimation {
-    0% { top: 0; }
-    100% { top: 100%; }
-}
-
 /* Route Stats Floating Overlay Widget */
 .route-stats-widget {
     position: absolute;

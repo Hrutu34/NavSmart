@@ -713,13 +713,6 @@ function initCanvasParticles() {
     animate();
 }
 
-
-        transcriptionDiv.textContent = data.reply;
-    } else {
-        transcriptionDiv.textContent = 'Could not generate itinerary.';
-    }
-}
-
 function addItineraryMarkers(itinerary) {
     const geocoder = new google.maps.Geocoder();
 
