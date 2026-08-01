@@ -1,7 +1,7 @@
 <div align="center">
 
-# ⚡ NAVSMART ⚡
-### *Next-Gen AI Itinerary Planning & Tactical Navigation System*
+# 📍🗺️ NAVSMART 🗺️📍
+### *Primitive AI based Itinerary Planning & Navigation System*
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-00f3ff?style=for-the-badge&logo=python&logoColor=black)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-2.0-00ff9d?style=for-the-badge&logo=fastapi&logoColor=black)](https://fastapi.tiangolo.com/)
@@ -10,14 +10,14 @@
 [![Gemini](https://img.shields.io/badge/Gemini-2.5-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev/)
 
 <p align="center">
-  <b>NavSmart</b> is a simple LLM and python based navigation prototype. It combines real-time streaming LLM intelligence, interactive map polyline plotting, dynamic multi-day itinerary generation, and voice speech-to-text input inside a glassmorphic cyber interface.
+  <b>NavSmart</b> is a simple LLM and python based navigation prototype. It combines real-time streaming LLM intelligence, interactive map polyline plotting, dynamic multi-day itinerary generation, and voice speech-to-text input inside a glassmorphic cyber interface. This interface supports both offline LLMs(using Local Ollama Server) as well as online LLMs(using API Keys from 3rd party vendors like Google Gemini)
 </p>
 
 </div>
 
 ---
 
-## Demo
+## 🎬 Demo
 
 <p align="center">
   <img src="app/assets/demo.gif" alt="Project Demo" width="900">
@@ -25,13 +25,13 @@
 
 ---
 
-## Key Features
+## 🛠️ Key Features
 
--**Futuristic Cyber HUD Interface:** Built with dark cybernetic glassmorphism, animated particle backgrounds, real-time status indicators, and glowing neon accents.
--**Real-Time Dynamic Token Streaming:** Real-time typewriter response generation powered by WebSockets, formatted dynamically with Markdown rendering and glowing location highlights.
--**Tactical Google Maps Integration:** Renders live driving routes, decodes polylines, plots start/end markers, and calculates real-time distance & duration metrics.
--**Dynamic Itinerary Visualizer:** Transforms travel queries into structured, interactive day-by-day itinerary cards with activity checklists.
--**Voice Speech-to-Text Input:** Built-in speech recognition with animated waveform indicators for hands-free navigation commands.
+- **Futuristic Cyber HUD Interface:** Built with dark cybernetic glassmorphism, animated particle backgrounds, real-time status indicators, and glowing neon accents.
+- **Real-Time Dynamic Token Streaming:** Real-time typewriter response generation powered by WebSockets, formatted dynamically with Markdown rendering and glowing location highlights.
+- **Google Maps Integration:** Renders live driving routes, decodes polylines, plots start/end markers, and calculates real-time distance & duration metrics.
+- **Dynamic Itinerary Visualizer:** Transforms travel queries into structured, interactive day-by-day itinerary cards with activity checklists.
+- **Voice Speech-to-Text Input:** Built-in speech recognition with animated waveform indicators for hands-free navigation commands.
 - **Dual LLM Engine (Ollama & Gemini):** Switch seamlessly between local open-source models (Ollama `llama3.2:3b`) and Google's Gemini models. Includes intelligent fallback streaming.
 
 
@@ -141,7 +141,7 @@ Only configure the variables required for your selected LLM provider. If using O
 
 ---
 
-## Quick Start Installation Guide
+## ⚡ Quick Start Installation Guide
 
 ### Prerequisites
 - Python 3.10 or higher
@@ -182,7 +182,7 @@ Only configure the variables required for your selected LLM provider. If using O
 
 ---
 
-## API Endpoints Summary
+## 🔌 API Endpoints Summary
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
@@ -197,7 +197,7 @@ Only configure the variables required for your selected LLM provider. If using O
 
 ---
 
-## Credits & Team
+## 🤝 Credits & Team
 
 Developed by **Team Nav-E-Gators** as part of **I.Mobilothon 2025** prototype.
 
