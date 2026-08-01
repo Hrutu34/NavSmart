@@ -3,53 +3,166 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NavSmart</title>
-    <!-- Link external stylesheet -->
+    <title>NavSmart // AI Navigation & Itinerary Command Center</title>
+    <!-- Futuristic Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;600;800;900&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Marked.js for real-time Markdown streaming -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- App Stylesheet -->
     <link rel="stylesheet" href="/static/styles.css">
-    <link rel="icon" href="data:,">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
 </head>
-<body>
+<body class="cyber-theme">
+    <!-- Animated Cyber Grid & Canvas Particles -->
+    <canvas id="bgCanvas"></canvas>
 
-    <div class="header">
-        <h1>NavSmart</h1>
-        <h3>AI based Itinerary Planning and Navigation App</h3>
-    </div>
-
-    <div class="main-container">
-        <div class="left-panel">
-            <div id="map"></div>
+    <!-- Top HUD Navigation Bar -->
+    <header class="hud-header">
+        <div class="brand-container">
+            <div class="cyber-logo">
+                <i class="fa-solid fa-compass-drafting fa-spin-pulse" style="--fa-animation-duration: 12s;"></i>
+                <span class="logo-text">NAV<span class="highlight">SMART</span></span>
+            </div>
+            <div class="hud-badge">
+                <span class="pulse-dot"></span>
+                <span class="badge-text">AI CORE: ONLINE</span>
+            </div>
         </div>
 
-        <!-- Right panel for chatbot & itinerary -->
-        <div class="right-panel">
-            <div id="chatbot">
-                <div id="chatContent">
-                    <h3>Iternary Planner</h3>
-                    <div id="messages"></div>
-                    <div id="itineraryDisplay">
-                        <ul id="itineraryList"></ul>
+        <div class="hud-quick-prompts">
+            <span class="chip-label"><i class="fa-solid fa-bolt"></i> Quick Queries:</span>
+            <button class="prompt-chip" data-prompt="Show route from Paris to Rome"><i class="fa-solid fa-route"></i> Paris ➔ Rome</button>
+            <button class="prompt-chip" data-prompt="3 day itinerary for Tokyo Japan"><i class="fa-solid fa-map-location-dot"></i> Tokyo 3-Day Trip</button>
+            <button class="prompt-chip" data-prompt="Route from New York to Boston"><i class="fa-solid fa-car"></i> NY ➔ Boston</button>
+        </div>
+
+        <div class="hud-actions">
+            <div class="status-pill" id="serverStatus">
+                <i class="fa-solid fa-network-wired"></i> WS: CONNECTED
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Command Center Grid -->
+    <main class="main-container">
+        <!-- Left Panel: Interactive Tactical Map -->
+        <section class="panel left-panel">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <i class="fa-solid fa-map"></i> TACTICAL NAVIGATION MAP
+                </div>
+                <div class="map-status" id="mapOverlayStatus">
+                    <i class="fa-solid fa-crosshairs"></i> GeoEngine Ready
+                </div>
+            </div>
+            
+            <div class="map-wrapper">
+                <div id="map"></div>
+                <!-- HUD Scan overlay line -->
+                <div class="scan-line"></div>
+                <!-- Route Stats Widget on Map -->
+                <div class="route-stats-widget hidden" id="routeStatsWidget">
+                    <div class="stat-item">
+                        <i class="fa-solid fa-arrows-left-right-to-line"></i>
+                        <span id="routeDistance">-- km</span>
+                    </div>
+                    <div class="stat-item">
+                        <i class="fa-solid fa-clock"></i>
+                        <span id="routeDuration">-- mins</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right Panel: Cyber Assistant & Itinerary Terminal -->
+        <section class="panel right-panel">
+            <!-- Terminal Header with Tabs -->
+            <div class="panel-header tab-header">
+                <div class="terminal-tabs">
+                    <button class="tab-btn active" data-tab="chatTab">
+                        <i class="fa-solid fa-robot"></i> AI Intelligence Stream
+                    </button>
+                    <button class="tab-btn" data-tab="itineraryTab">
+                        <i class="fa-solid fa-calendar-days"></i> Itinerary Visualizer
+                    </button>
+                </div>
+                <div class="tab-indicator-bar"></div>
+            </div>
+
+            <!-- Tab 1: Dynamic Chatbot Terminal -->
+            <div class="tab-content active" id="chatTab">
+                <div id="chatContent" class="chat-viewport">
+                    <div id="messages" class="messages-container">
+                        <div class="message system">
+                            <div class="system-badge">
+                                <i class="fa-solid fa-shield-halved"></i> SYSTEM INITIALIZED
+                            </div>
+                            <div class="system-text">NavSmart AI Neural Interface Connected. Ask for routes, travel plans, or navigation instructions.</div>
+                        </div>
                     </div>
                 </div>
 
-                <div id="chatControls">
-                    <input id="chatInput" type="text" placeholder="Type a message" />
-                    <button id="sendBtn">Send</button>
-                    <button id="micBtn">Speak</button>
-                    <!--<button id="itineraryBtn">Generate Itinerary</button>-->
+                <!-- Input Controls Bar -->
+                <div id="chatControls" class="chat-controls-hud">
+                    <div class="voice-transcription-bar hidden" id="transcriptionBar">
+                        <span class="mic-wave"><i class="fa-solid fa-wave-square fa-beat"></i></span>
+                        <span id="transcription">Listening for voice command...</span>
+                    </div>
+
+                    <div class="input-glow-group">
+                        <i class="fa-solid fa-terminal input-icon"></i>
+                        <input id="chatInput" type="text" placeholder="Type prompt (e.g., 'Route from London to Edinburgh' or 'Itinerary for Paris')..." autocomplete="off" />
+                        
+                        <button id="micBtn" class="control-btn mic-btn" title="Voice Input">
+                            <i class="fa-solid fa-microphone"></i>
+                        </button>
+                        
+                        <button id="sendBtn" class="control-btn send-btn">
+                            <span>Send</span> <i class="fa-solid fa-paper-plane"></i>
+                        </button>
+                    </div>
                 </div>
-                <div id="transcription" style="font-style: italic; color: #555;"></div>
             </div>
+
+            <!-- Tab 2: Interactive Itinerary Terminal -->
+            <div class="tab-content" id="itineraryTab">
+                <div class="itinerary-viewport">
+                    <div class="itinerary-header-banner">
+                        <div class="itinerary-title">
+                            <i class="fa-solid fa-route"></i> Dynamic Trip Itinerary Planner
+                        </div>
+                        <button class="cyber-button-sm" id="genItineraryBtn">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> Generate From Chat
+                        </button>
+                    </div>
+                    <div id="itineraryDisplay" class="itinerary-cards-container">
+                        <div class="empty-itinerary-placeholder">
+                            <i class="fa-solid fa-compass fa-bounce"></i>
+                            <h3>No Active Itinerary Loaded</h3>
+                            <p>Ask NavSmart in the chat (e.g. <em>"Plan a 4-day trip to Rome"</em>) or click 'Generate From Chat' to build your itinerary cards.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- HUD Footer -->
+    <footer class="hud-footer">
+        <div class="footer-info">
+            <span>NavSmart CyberEngine v2.0</span> // <span>Team Nav-E-Gators</span>
         </div>
-    </div>
+        <div class="footer-latency">
+            <i class="fa-solid fa-microchip"></i> Realtime Stream Engine Enabled
+        </div>
+    </footer>
 
-    <div class="footer">
-        <h5>A primitive prototype by team Nav-E-Gators</h5>
-    </div>
-
-    <!-- Link external JavaScript -->
+    <!-- Main Client Application Script -->
     <script defer src="/static/script.js"></script>
-
-    <!-- Google Maps API (replace My_Key with your actual key) -->
-    <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDDgJKSce1dwXMTZ886PDMqjaJrF9z1ErA"></script>
 </body>
 </html>
+

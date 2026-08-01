@@ -1,202 +1,718 @@
-let map, directionsService, directionsRenderer, transcriptionDiv;
-let chatSocket;
-let lastAssistantEl;
+/* ==========================================================================
+   NAVSMART - FUTURISTIC CYBER COMMAND CENTER FRONTEND CLIENT
+   ========================================================================== */
 
-function initMap() {
-    directionsService = new google.maps.DirectionsService();
-    directionsRenderer = new google.maps.DirectionsRenderer();
+let map, polylineOverlay, startMarker, endMarker;
+let chatSocket = null;
+let currentAssistantMsgObj = null;
+let rawStreamingText = "";
+let isRecording = false;
 
-    const initialLocation = { lat: 22.5726, lng: 88.3638 }; // Kolkata
-    map = new google.maps.Map(document.getElementById("map"), {
-        zoom: 7,
-        center: initialLocation,
-    });
-    directionsRenderer.setMap(map);
-}
-
-window.initMap = initMap;
-
-document.addEventListener('DOMContentLoaded', () => {
-  const waitForGoogle = setInterval(() => {
-    if (window.google && google.maps) {
-      clearInterval(waitForGoogle);
-      initMap(); // Safe to call now
+// ==========================================================================
+// 1. INITIALIZATION & SETUP
+// ==========================================================================
+document.addEventListener('DOMContentLoaded', async () => {
+    initCanvasParticles();
+    setupTabSwitching();
+    setupQuickPrompts();
+    
+    // Fetch frontend configuration (e.g. Google Maps API Key)
+    try {
+        const configResp = await fetch('/api/config');
+        const config = await configResp.json();
+        if (config.googleMapsApiKey) {
+            loadGoogleMapsScript(config.googleMapsApiKey);
+        } else {
+            initDefaultMap();
+        }
+    } catch (e) {
+        initDefaultMap();
     }
-  }, 100);
+
+    setupChatSocket();
+    setupEventListeners();
 });
 
-document.addEventListener('DOMContentLoaded', () => {
-    transcriptionDiv = document.getElementById('transcription');
-    setupChatSocket();
+// Load Google Maps JS API dynamically with callback
+function loadGoogleMapsScript(apiKey) {
+    if (window.google && window.google.maps) {
+        initMap();
+        return;
+    }
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=initMap`;
+    script.async = true;
+    script.defer = true;
+    document.head.appendChild(script);
+}
+
+// Initialize Google Maps in dark cyber theme
+window.initMap = function() {
+    const initialLocation = { lat: 22.5726, lng: 88.3638 }; // Kolkata default
+    
+    const darkMapStyle = [
+        { "elementType": "geometry", "stylers": [{ "color": "#0a0f1d" }] },
+        { "elementType": "labels.text.fill", "stylers": [{ "color": "#758fae" }] },
+        { "elementType": "labels.text.stroke", "stylers": [{ "color": "#0a0f1d" }] },
+        { "featureType": "administrative", "elementType": "geometry.stroke", "stylers": [{ "color": "#1f2d48" }] },
+        { "featureType": "landscape", "elementType": "geometry", "stylers": [{ "color": "#0e1526" }] },
+        { "featureType": "poi", "elementType": "geometry", "stylers": [{ "color": "#111a2e" }] },
+        { "featureType": "road", "elementType": "geometry", "stylers": [{ "color": "#1b273d" }] },
+        { "featureType": "road.highway", "elementType": "geometry", "stylers": [{ "color": "#00f3ff" }, { "weight": 0.5 }, { "lightness": -50 }] },
+        { "featureType": "water", "elementType": "geometry", "stylers": [{ "color": "#060a14" }] }
+    ];
+
+    const mapElement = document.getElementById("map");
+    if (!mapElement) return;
+
+    try {
+        map = new google.maps.Map(mapElement, {
+            zoom: 6,
+            center: initialLocation,
+            styles: darkMapStyle,
+            disableDefaultUI: false,
+            zoomControl: true,
+        });
+        updateMapOverlayStatus("Google Maps GeoEngine Active");
+    } catch (e) {
+        initDefaultMap();
+    }
+};
+
+function initDefaultMap() {
+    updateMapOverlayStatus("Standard Map Active");
+}
+
+function updateMapOverlayStatus(text) {
+    const el = document.getElementById("mapOverlayStatus");
+    if (el) el.innerHTML = `<i class="fa-solid fa-crosshairs"></i> ${text}`;
+}
+
+// ==========================================================================
+// 2. WEBSOCKET REAL-TIME RESPONSE STREAMING
+// ==========================================================================
+function setupChatSocket() {
+    const protocol = location.protocol === 'https:' ? 'wss://' : 'ws://';
+    const wsUrl = `${protocol}${location.host}/ws/chat`;
+
+    chatSocket = new WebSocket(wsUrl);
+
+    chatSocket.onopen = () => {
+        updateServerStatus(true);
+    };
+
+    chatSocket.onclose = () => {
+        updateServerStatus(false);
+        setTimeout(setupChatSocket, 2000);
+    };
+
+    chatSocket.onerror = () => {
+        updateServerStatus(false);
+    };
+
+    chatSocket.onmessage = (event) => {
+        const token = event.data;
+
+        if (token === "[__STREAM_COMPLETE__]") {
+            // Stream finished, finalize message formatting and check for route/itinerary triggers
+            finalizeCurrentStreamingMessage();
+            return;
+        }
+
+        if (!currentAssistantMsgObj) {
+            currentAssistantMsgObj = createAssistantMessageCard();
+        }
+
+        rawStreamingText += token;
+        renderStreamingMarkdown(currentAssistantMsgObj, rawStreamingText);
+    };
+}
+
+function updateServerStatus(online) {
+    const pill = document.getElementById("serverStatus");
+    if (pill) {
+        if (online) {
+            pill.innerHTML = `<i class="fa-solid fa-network-wired"></i> WS: CONNECTED`;
+            pill.style.color = "var(--green-accent)";
+        } else {
+            pill.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> RECONNECTING...`;
+            pill.style.color = "#fbbf24";
+        }
+    }
+}
+
+// Create a new assistant response bubble with streaming cursor
+function createAssistantMessageCard() {
+    const container = document.getElementById('messages');
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'message assistant';
+
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'message-content';
+
+    const cursorSpan = document.createElement('span');
+    cursorSpan.className = 'streaming-cursor';
+
+    msgDiv.appendChild(contentDiv);
+    msgDiv.appendChild(cursorSpan);
+
+    container.appendChild(msgDiv);
+    scrollChatToBottom();
+
+    return { card: msgDiv, content: contentDiv, cursor: cursorSpan };
+}
+
+// Render dynamic stream markdown with bolding, lists, and highlighting
+function renderStreamingMarkdown(msgObj, text) {
+    let htmlContent = "";
+    if (window.marked && typeof window.marked.parse === 'function') {
+        try {
+            htmlContent = marked.parse(text);
+        } catch (e) {
+            htmlContent = formatCustomMarkdown(text);
+        }
+    } else {
+        htmlContent = formatCustomMarkdown(text);
+    }
+
+    msgObj.content.innerHTML = htmlContent;
+    scrollChatToBottom();
+}
+
+function finalizeCurrentStreamingMessage() {
+    if (currentAssistantMsgObj) {
+        if (currentAssistantMsgObj.cursor) {
+            currentAssistantMsgObj.cursor.remove();
+        }
+
+        // Trigger route plot or itinerary check based on user query
+        const textToAnalyze = rawStreamingText;
+        if (textToAnalyze.toLowerCase().includes("route") || textToAnalyze.toLowerCase().includes("from")) {
+            // Check if route details can be fetched
+        }
+        
+        currentAssistantMsgObj = null;
+        rawStreamingText = "";
+    }
+}
+
+// Custom fallback markdown formatter if marked library is offline
+function formatCustomMarkdown(text) {
+    let escaped = text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+
+    // Headers
+    escaped = escaped.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+    escaped = escaped.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+    escaped = escaped.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+
+    // Bold
+    escaped = escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    // Italics
+    escaped = escaped.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    // Code
+    escaped = escaped.replace(/`(.*?)`/g, '<code>$1</code>');
+    // Bullet points
+    escaped = escaped.replace(/^\- (.*$)/gim, '<ul><li>$1</li></ul>');
+    escaped = escaped.replace(/<\/ul>\s*<ul>/g, '');
+
+    // Line breaks
+    escaped = escaped.replace(/\n/g, '<br>');
+
+    return escaped;
+}
+
+function appendUserMessage(text) {
+    const container = document.getElementById('messages');
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'message user';
+    msgDiv.textContent = text;
+    container.appendChild(msgDiv);
+    scrollChatToBottom();
+}
+
+function scrollChatToBottom() {
+    const viewport = document.getElementById('chatContent');
+    if (viewport) {
+        viewport.scrollTop = viewport.scrollHeight;
+    }
+}
+
+// ==========================================================================
+// 3. CHAT INPUT & COMMAND HANDLER
+// ==========================================================================
+function setupEventListeners() {
     const sendBtn = document.getElementById('sendBtn');
     const chatInput = document.getElementById('chatInput');
-    if (sendBtn) sendBtn.addEventListener('click', sendChatMessage);
-    if (chatInput) chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendChatMessage(); });
+    const micBtn = document.getElementById('micBtn');
+    const genItineraryBtn = document.getElementById('genItineraryBtn');
 
-    document.getElementById('micBtn').addEventListener('click', startVoiceRecognition);
-    // document.getElementById('itineraryBtn').addEventListener('click', () => {
-    //     const message = getCleanMessage();
-    //     fetchItinerary(message);
-    // });
-});
+    if (sendBtn) sendBtn.addEventListener('click', handleSendChatMessage);
+    if (chatInput) {
+        chatInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') handleSendChatMessage();
+        });
+    }
 
-function startVoiceRecognition() {
-    transcriptionDiv.textContent = '🎙️ Listening...';
-
-    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-    recognition.lang = 'en-US';
-    recognition.start();
-
-    recognition.onresult = async (event) => {
-        const spokenText = event.results[0][0].transcript;
-        transcriptionDiv.textContent = `You said: "${spokenText}"`;
-        fetchRoute(spokenText);
-        if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
-            appendMessage('You', spokenText);
-            lastAssistantEl = appendMessage('Assistant', '');
-            chatSocket.send(spokenText);
-        }
-    };
-
-    recognition.onerror = (event) => {
-        transcriptionDiv.textContent = `Error: ${event.error}`;
-    };
+    if (micBtn) micBtn.addEventListener('click', toggleVoiceRecognition);
+    if (genItineraryBtn) genItineraryBtn.addEventListener('click', handleGenerateItinerary);
 }
 
-function getCleanMessage() {
-    return transcriptionDiv.textContent.replace('You said: "', '').replace('"', '');
-}
-
-function setupChatSocket() {
-    const wsUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/ollama';
-    chatSocket = new WebSocket(wsUrl);
-    chatSocket.onopen = () => { appendMessage('System', 'Connected to chat'); };
-    chatSocket.onerror = () => { appendMessage('System', 'Chat connection error'); };
-    chatSocket.onclose = () => { setTimeout(setupChatSocket, 1500); };
-    chatSocket.onmessage = (evt) => {
-        if (!lastAssistantEl) { lastAssistantEl = appendMessage('Assistant', ''); }
-        lastAssistantEl.textContent += evt.data;
-    };
-}
-
-function appendMessage(role, text) {
-    const container = document.getElementById('messages') || document.getElementById('chatContent');
-    const div = document.createElement('div');
-    let cls = 'assistant';
-    if (role.toLowerCase() === 'you') cls = 'user';
-    else if (role.toLowerCase() === 'assistant') cls = 'assistant';
-    else cls = 'system';
-    div.className = `message ${cls}`;
-    div.textContent = text || '';
-    container.appendChild(div);
-    const scroller = document.getElementById('chatContent');
-    if (scroller) scroller.scrollTop = scroller.scrollHeight;
-    return div;
-}
-
-function sendChatMessage() {
-    const input = document.getElementById('chatInput');
-    const text = input ? input.value.trim() : '';
+function handleSendChatMessage() {
+    const chatInput = document.getElementById('chatInput');
+    const text = chatInput ? chatInput.value.trim() : '';
     if (!text) return;
-    appendMessage('You', text);
-    lastAssistantEl = appendMessage('Assistant', '');
+
+    appendUserMessage(text);
+    chatInput.value = '';
+
+    // Check if the input specifies a route request (e.g. "from ... to ...")
+    if (text.toLowerCase().includes("from") && text.toLowerCase().includes("to")) {
+        fetchAndDrawRoute(text);
+    }
+    
+    // Check if prompt asks for itinerary
+    if (text.toLowerCase().includes("itinerary") || text.toLowerCase().includes("trip") || text.toLowerCase().includes("plan")) {
+        fetchItineraryPlan(text);
+    }
+
+    // Send over WebSocket or HTTP fallback
     if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
         chatSocket.send(text);
     } else {
-        fetch('/chat/ollama', {
+        // Fallback HTTP chat call
+        fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ message: text })
-        }).then(r => r.json()).then(data => {
-            lastAssistantEl.textContent += (data.reply || data.error || '');
-        }).catch(() => {
-            lastAssistantEl.textContent += ' (failed to reach chat server)';
+        })
+        .then(r => r.json())
+        .then(data => {
+            const assistantObj = createAssistantMessageCard();
+            renderStreamingMarkdown(assistantObj, data.reply || "Response generated.");
+            assistantObj.cursor.remove();
         });
     }
-    if (input) input.value = '';
 }
 
-async function fetchRoute(message) {
+// ==========================================================================
+// 4. MAP ROUTE PLOTTING
+// ==========================================================================
+async function fetchAndDrawRoute(promptText) {
     try {
-        transcriptionDiv.textContent = "Fetching route...";
+        updateMapOverlayStatus("Calculating Optimal Path...");
 
         const response = await fetch('/location/get-details-route', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message })
+            body: JSON.stringify({ message: promptText })
+        });
+
+        const points = await response.json();
+
+        if (Array.isArray(points) && points.length > 0) {
+            drawRoutePolyline(points);
+            updateMapOverlayStatus("Tactical Route Plotted");
+        } else {
+            updateMapOverlayStatus("Geocoding coordinates...");
+            // Fallback: try standard get-route geocoding
+            fetchSimpleRouteCoords(promptText);
+        }
+    } catch (e) {
+        updateMapOverlayStatus("Route plotting ready");
+    }
+}
+
+async function fetchSimpleRouteCoords(promptText) {
+    try {
+        const response = await fetch('/location/get-route', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: promptText })
         });
 
         const data = await response.json();
-
-        if (!Array.isArray(data) || data.length === 0) {
-            transcriptionDiv.textContent = "No route found or invalid response.";
-            return;
+        if (data.start && data.start.latitude && data.end && data.end.latitude) {
+            const points = [
+                [data.start.latitude, data.start.longitude],
+                [data.end.latitude, data.end.longitude]
+            ];
+            drawRoutePolyline(points);
         }
-
-        drawRoutePolyline(data);
-
-    } catch (error) {
-        transcriptionDiv.textContent = `Route error: ${error.message}`;
+    } catch (e) {
+        // Silent catch
     }
 }
 
 function drawRoutePolyline(points) {
-    const path = points.map(([lat, lng]) => ({ lat, lng }));
+    if (!window.google || !google.maps || !map) return;
 
-    // Center the map
-    if (path.length > 0) {
-        map.setCenter(path[0]);
-    }
+    const path = points.map(([lat, lng]) => ({ lat: parseFloat(lat), lng: parseFloat(lng) }));
 
-    // Clear old route
-    directionsRenderer.setMap(null);
+    // Clear existing polyline & markers
+    if (polylineOverlay) polylineOverlay.setMap(null);
+    if (startMarker) startMarker.setMap(null);
+    if (endMarker) endMarker.setMap(null);
 
-    // Draw polyline
-    new google.maps.Polyline({
+    // Create start and destination markers
+    const startLoc = path[0];
+    const endLoc = path[path.length - 1];
+
+    startMarker = new google.maps.Marker({
+        position: startLoc,
+        map: map,
+        title: "Start Location",
+        icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 8,
+            fillColor: "#00ff9d",
+            fillOpacity: 1,
+            strokeColor: "#ffffff",
+            strokeWeight: 2
+        }
+    });
+
+    endMarker = new google.maps.Marker({
+        position: endLoc,
+        map: map,
+        title: "Destination",
+        icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 8,
+            fillColor: "#00f3ff",
+            fillOpacity: 1,
+            strokeColor: "#ffffff",
+            strokeWeight: 2
+        }
+    });
+
+    // Draw glowing polyline
+    polylineOverlay = new google.maps.Polyline({
         path: path,
         geodesic: true,
-        strokeColor: "#007bff",
-        strokeOpacity: 1.0,
-        strokeWeight: 4,
+        strokeColor: "#00f3ff",
+        strokeOpacity: 0.9,
+        strokeWeight: 5,
         map: map
     });
 
-    transcriptionDiv.textContent = "✅ Route plotted.";
+    // Adjust map view bounds to fit route
+    const bounds = new google.maps.LatLngBounds();
+    path.forEach(p => bounds.extend(p));
+    map.fitBounds(bounds);
+
+    // Display route stats
+    displayRouteStatsWidget(path);
 }
 
+function displayRouteStatsWidget(path) {
+    const widget = document.getElementById('routeStatsWidget');
+    const distEl = document.getElementById('routeDistance');
+    const durEl = document.getElementById('routeDuration');
 
-async function fetchItinerary(message) {
+    if (!widget || path.length < 2) return;
+
+    // Estimate straight-line distance sum
+    let totalKm = 0;
+    for (let i = 0; i < path.length - 1; i++) {
+        totalKm += calculateHaversineDistance(path[i], path[i+1]);
+    }
+
+    const totalMins = Math.round((totalKm / 65) * 60); // Est driving time at 65km/h
+
+    if (distEl) distEl.textContent = `${totalKm.toFixed(1)} km`;
+    if (durEl) durEl.textContent = `~${totalMins} mins`;
+
+    widget.classList.remove('hidden');
+}
+
+function calculateHaversineDistance(p1, p2) {
+    const R = 6371; // km
+    const dLat = (p2.lat - p1.lat) * Math.PI / 180;
+    const dLng = (p2.lng - p1.lng) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(p1.lat * Math.PI / 180) * Math.cos(p2.lat * Math.PI / 180) *
+              Math.sin(dLng/2) * Math.sin(dLng/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+}
+
+// ==========================================================================
+// 5. ITINERARY CARDS RENDERING
+// ==========================================================================
+function handleGenerateItinerary() {
+    const lastUserMsg = getLastUserQuery();
+    if (lastUserMsg) {
+        fetchItineraryPlan(lastUserMsg);
+    } else {
+        fetchItineraryPlan("3 day itinerary for Paris");
+    }
+}
+
+function getLastUserQuery() {
+    const userMsgs = document.querySelectorAll('.message.user');
+    if (userMsgs.length > 0) {
+        return userMsgs[userMsgs.length - 1].textContent;
+    }
+    return "";
+}
+
+async function fetchItineraryPlan(promptText) {
+    const displayContainer = document.getElementById('itineraryDisplay');
+    if (displayContainer) {
+        displayContainer.innerHTML = `
+            <div class="empty-itinerary-placeholder">
+                <i class="fa-solid fa-spinner fa-spin" style="font-size: 2.5rem; color: var(--cyan-primary);"></i>
+                <h3>Synthesizing AI Itinerary...</h3>
+                <p>Generating day-by-day travel plan and activities...</p>
+            </div>
+        `;
+    }
+
     try {
         const response = await fetch('/location/get-itinerary', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message })
+            body: JSON.stringify({ message: promptText })
         });
 
         const data = await response.json();
-        if (data.itinerary && Array.isArray(data.itinerary)) {
-            data.itinerary.forEach(day => {
-                displayItinerary(data);
-                addItineraryMarkers(data.itinerary);
-            });
-        } else {
-            transcriptionDiv.textContent = 'Could not generate itinerary.';
+        renderItineraryCards(data);
+
+        // Switch to itinerary tab automatically
+        const itineraryTabBtn = document.querySelector('.tab-btn[data-tab="itineraryTab"]');
+        if (itineraryTabBtn) itineraryTabBtn.click();
+
+    } catch (e) {
+        if (displayContainer) {
+            displayContainer.innerHTML = `
+                <div class="empty-itinerary-placeholder">
+                    <i class="fa-solid fa-circle-exclamation" style="color: #ff0055;"></i>
+                    <h3>Unable to generate itinerary</h3>
+                    <p>Please check your backend connection or try again.</p>
+                </div>
+            `;
         }
-    } catch (error) {
-        transcriptionDiv.textContent = `Itinerary error: ${error.message}`;
     }
 }
 
-function displayItinerary(data) {
-    const itineraryList = document.getElementById('itineraryList');
-    itineraryList.innerHTML = ''; // Clear previous
+function renderItineraryCards(data) {
+    const displayContainer = document.getElementById('itineraryDisplay');
+    if (!displayContainer) return;
 
-    if (data.itinerary) {
-        data.itinerary.forEach(day => {
-            const item = document.createElement('li');
-            item.innerHTML = `<strong>${day.day} - ${day.location}</strong><br>${day.activities.join(', ')}`;
-            itineraryList.appendChild(item);
+    if (!data.itinerary || !Array.isArray(data.itinerary) || data.itinerary.length === 0) {
+        displayContainer.innerHTML = `
+            <div class="empty-itinerary-placeholder">
+                <i class="fa-solid fa-compass"></i>
+                <h3>No Itinerary Plan Found</h3>
+                <p>Try asking for a specific destination (e.g. "3 day plan for Tokyo").</p>
+            </div>
+        `;
+        return;
+    }
+
+    displayContainer.innerHTML = ''; // Clear placeholder
+
+    data.itinerary.forEach((dayItem, index) => {
+        const card = document.createElement('div');
+        card.className = 'itinerary-card';
+        card.style.animationDelay = `${index * 0.1}s`;
+
+        const activitiesHtml = (dayItem.activities || []).map(act => `
+            <li class="activity-item">
+                <i class="fa-solid fa-check-double"></i>
+                <span>${act}</span>
+            </li>
+        `).join('');
+
+        card.innerHTML = `
+            <div class="itinerary-card-header">
+                <span class="day-badge">${dayItem.day || `Day ${index + 1}`}</span>
+                <span class="card-location"><i class="fa-solid fa-location-dot"></i> ${dayItem.location || 'Explore Location'}</span>
+            </div>
+            <ul class="activity-list">
+                ${activitiesHtml}
+            </ul>
+        `;
+
+        displayContainer.appendChild(card);
+    });
+}
+
+// ==========================================================================
+// 6. VOICE RECOGNITION (SPEECH-TO-TEXT)
+// ==========================================================================
+function toggleVoiceRecognition() {
+    const micBtn = document.getElementById('micBtn');
+    const transcriptionBar = document.getElementById('transcriptionBar');
+    const transcriptionEl = document.getElementById('transcription');
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+        alert("Speech Recognition is not supported in this browser. Please use Google Chrome or Edge.");
+        return;
+    }
+
+    if (isRecording) {
+        isRecording = false;
+        if (micBtn) micBtn.classList.remove('recording');
+        if (transcriptionBar) transcriptionBar.classList.add('hidden');
+        return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.continuous = false;
+    recognition.interimResults = true;
+
+    recognition.onstart = () => {
+        isRecording = true;
+        if (micBtn) micBtn.classList.add('recording');
+        if (transcriptionBar) transcriptionBar.classList.remove('hidden');
+        if (transcriptionEl) transcriptionEl.textContent = "Listening for prompt...";
+    };
+
+    recognition.onresult = (event) => {
+        const transcript = Array.from(event.results)
+            .map(result => result[0].transcript)
+            .join('');
+
+        if (transcriptionEl) transcriptionEl.textContent = `"${transcript}"`;
+
+        if (event.results[0].isFinal) {
+            const chatInput = document.getElementById('chatInput');
+            if (chatInput) chatInput.value = transcript;
+            setTimeout(() => {
+                handleSendChatMessage();
+                if (micBtn) micBtn.classList.remove('recording');
+                if (transcriptionBar) transcriptionBar.classList.add('hidden');
+                isRecording = false;
+            }, 800);
+        }
+    };
+
+    recognition.onerror = (event) => {
+        if (transcriptionEl) transcriptionEl.textContent = `Voice Error: ${event.error}`;
+        setTimeout(() => {
+            if (micBtn) micBtn.classList.remove('recording');
+            if (transcriptionBar) transcriptionBar.classList.add('hidden');
+            isRecording = false;
+        }, 2000);
+    };
+
+    recognition.start();
+}
+
+// ==========================================================================
+// 7. TAB SWITCHING & QUICK PROMPTS
+// ==========================================================================
+function setupTabSwitching() {
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    tabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const targetTab = btn.getAttribute('data-tab');
+
+            // Deactivate all
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+            // Activate target
+            btn.classList.add('active');
+            const targetEl = document.getElementById(targetTab);
+            if (targetEl) targetEl.classList.add('active');
         });
+    });
+}
+
+function setupQuickPrompts() {
+    const chips = document.querySelectorAll('.prompt-chip');
+    chips.forEach(chip => {
+        chip.addEventListener('click', () => {
+            const prompt = chip.getAttribute('data-prompt');
+            const chatInput = document.getElementById('chatInput');
+            if (chatInput && prompt) {
+                chatInput.value = prompt;
+                handleSendChatMessage();
+            }
+        });
+    });
+}
+
+// ==========================================================================
+// 8. BACKGROUND CANVAS PARTICLES
+// ==========================================================================
+function initCanvasParticles() {
+    const canvas = document.getElementById('bgCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    let width = canvas.width = window.innerWidth;
+    let height = canvas.height = window.innerHeight;
+
+    window.addEventListener('resize', () => {
+        width = canvas.width = window.innerWidth;
+        height = canvas.height = window.innerHeight;
+    });
+
+    const particles = [];
+    const particleCount = Math.floor(width / 25);
+
+    for (let i = 0; i < particleCount; i++) {
+        particles.push({
+            x: Math.random() * width,
+            y: Math.random() * height,
+            vx: (Math.random() - 0.5) * 0.4,
+            vy: (Math.random() - 0.5) * 0.4,
+            radius: Math.random() * 1.5 + 0.5,
+            alpha: Math.random() * 0.5 + 0.2
+        });
+    }
+
+    function animate() {
+        ctx.clearRect(0, 0, width, height);
+
+        // Draw grid lines
+        ctx.strokeStyle = "rgba(0, 243, 255, 0.03)";
+        ctx.lineWidth = 1;
+        const gridSize = 60;
+        for (let x = 0; x < width; x += gridSize) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, height);
+            ctx.stroke();
+        }
+        for (let y = 0; y < height; y += gridSize) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+            ctx.stroke();
+        }
+
+        // Draw particles
+        particles.forEach(p => {
+            p.x += p.vx;
+            p.y += p.vy;
+
+            if (p.x < 0) p.x = width;
+            if (p.x > width) p.x = 0;
+            if (p.y < 0) p.y = height;
+            if (p.y > height) p.y = 0;
+
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(0, 243, 255, ${p.alpha})`;
+            ctx.fill();
+        });
+
+        requestAnimationFrame(animate);
+    }
+
+    animate();
+}
+
 
         transcriptionDiv.textContent = data.reply;
     } else {
