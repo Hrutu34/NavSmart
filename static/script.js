@@ -1,12 +1,16 @@
 /* ==========================================================================
    NAVSMART - FUTURISTIC CYBER COMMAND CENTER FRONTEND CLIENT
    ========================================================================== */
+import { getUserLocation, populatePOIs, clearPOIMarkers } from "./mapService.js";
+import { initDirections, calculateItineraryWithStops } from "./routeService.js";
 
 let map, polylineOverlay, startMarker, endMarker;
 let chatSocket = null;
 let currentAssistantMsgObj = null;
 let rawStreamingText = "";
 let isRecording = false;
+let currentItinerary = [];
+let intermediateStops = [];
 
 // ==========================================================================
 // 1. INITIALIZATION & SETUP
@@ -33,14 +37,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupEventListeners();
 });
 
-// Load Google Maps JS API dynamically with callback
+// Load Google Maps JS API dynamically with callback & places library
 function loadGoogleMapsScript(apiKey) {
     if (window.google && window.google.maps) {
         initMap();
         return;
     }
     const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=initMap`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry&callback=initMap`;
     script.async = true;
     script.defer = true;
     document.head.appendChild(script);
@@ -73,6 +77,10 @@ window.initMap = function() {
             disableDefaultUI: false,
             zoomControl: true,
         });
+        
+        // Initialize routing service with the new map instance
+        initDirections(map);
+        
         updateMapOverlayStatus("Google Maps GeoEngine Active");
     } catch (e) {
         initDefaultMap();
@@ -114,7 +122,6 @@ function setupChatSocket() {
         const token = event.data;
 
         if (token === "[__STREAM_COMPLETE__]") {
-            // Stream finished, finalize message formatting and check for route/itinerary triggers
             finalizeCurrentStreamingMessage();
             return;
         }
@@ -141,7 +148,6 @@ function updateServerStatus(online) {
     }
 }
 
-// Create a new assistant response bubble with streaming cursor
 function createAssistantMessageCard() {
     const container = document.getElementById('messages');
     const msgDiv = document.createElement('div');
@@ -162,17 +168,17 @@ function createAssistantMessageCard() {
     return { card: msgDiv, content: contentDiv, cursor: cursorSpan };
 }
 
-// Render dynamic stream markdown with bolding, lists, and highlighting
 function renderStreamingMarkdown(msgObj, text) {
+    const cleanText = sanitizeCyberText(text);
     let htmlContent = "";
     if (window.marked && typeof window.marked.parse === 'function') {
         try {
-            htmlContent = marked.parse(text);
+            htmlContent = marked.parse(cleanText);
         } catch (e) {
-            htmlContent = formatCustomMarkdown(text);
+            htmlContent = formatCustomMarkdown(cleanText);
         }
     } else {
-        htmlContent = formatCustomMarkdown(text);
+        htmlContent = formatCustomMarkdown(cleanText);
     }
 
     msgObj.content.innerHTML = htmlContent;
@@ -184,39 +190,30 @@ function finalizeCurrentStreamingMessage() {
         if (currentAssistantMsgObj.cursor) {
             currentAssistantMsgObj.cursor.remove();
         }
-
-        // Trigger route plot or itinerary check based on user query
-        const textToAnalyze = rawStreamingText;
-        if (textToAnalyze.toLowerCase().includes("route") || textToAnalyze.toLowerCase().includes("from")) {
-            // Check if route details can be fetched
-        }
-        
         currentAssistantMsgObj = null;
         rawStreamingText = "";
     }
 }
 
-// Custom fallback markdown formatter if marked library is offline
 function formatCustomMarkdown(text) {
     let escaped = text
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;");
 
-    // Headers
-    escaped = escaped.replace(/^### (.*$)/gim, '<h3>$1</h3>');
-    escaped = escaped.replace(/^## (.*$)/gim, '<h2>$1</h2>');
-    escaped = escaped.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+    // Clean Section Titles
+    escaped = escaped.replace(/^### (.*$)/gim, '<div class="chat-section-header">$1</div>');
+    escaped = escaped.replace(/^## (.*$)/gim, '<div class="chat-section-header main">$1</div>');
+    escaped = escaped.replace(/^# (.*$)/gim, '<div class="chat-section-header main">$1</div>');
 
-    // Bold
+    // Bold, Italics, Code
     escaped = escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    // Italics
     escaped = escaped.replace(/\*(.*?)\*/g, '<em>$1</em>');
-    // Code
     escaped = escaped.replace(/`(.*?)`/g, '<code>$1</code>');
+
     // Bullet points
-    escaped = escaped.replace(/^\- (.*$)/gim, '<ul><li>$1</li></ul>');
-    escaped = escaped.replace(/<\/ul>\s*<ul>/g, '');
+    escaped = escaped.replace(/^\- (.*$)/gim, '<li class="chat-bullet">$1</li>');
+    escaped = escaped.replace(/(<li class="chat-bullet">.*<\/li>)/gims, '<ul class="chat-list">$1</ul>');
 
     // Line breaks
     escaped = escaped.replace(/\n/g, '<br>');
@@ -241,7 +238,7 @@ function scrollChatToBottom() {
 }
 
 // ==========================================================================
-// 3. CHAT INPUT & COMMAND HANDLER
+// 3. CHAT INPUT, COMMAND HANDLERS & POI HOOKS
 // ==========================================================================
 function setupEventListeners() {
     const sendBtn = document.getElementById('sendBtn');
@@ -258,9 +255,17 @@ function setupEventListeners() {
 
     if (micBtn) micBtn.addEventListener('click', toggleVoiceRecognition);
     if (genItineraryBtn) genItineraryBtn.addEventListener('click', handleGenerateItinerary);
+
+    // Contextual exploration POI buttons if present in your markup
+    document.querySelectorAll('[data-poi]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const category = btn.getAttribute('data-poi');
+            handleExplorePOIs(category);
+        });
+    });
 }
 
-function handleSendChatMessage() {
+async function handleSendChatMessage() {
     const chatInput = document.getElementById('chatInput');
     const text = chatInput ? chatInput.value.trim() : '';
     if (!text) return;
@@ -268,21 +273,53 @@ function handleSendChatMessage() {
     appendUserMessage(text);
     chatInput.value = '';
 
-    // Check if the input specifies a route request (e.g. "from ... to ...")
-    if (text.toLowerCase().includes("from") && text.toLowerCase().includes("to")) {
-        fetchAndDrawRoute(text);
-    }
-    
-    // Check if prompt asks for itinerary
-    if (text.toLowerCase().includes("itinerary") || text.toLowerCase().includes("trip") || text.toLowerCase().includes("plan")) {
-        fetchItineraryPlan(text);
+    const lower = text.toLowerCase();
+
+    // 1. Natural Language Geolocation Trigger
+    if (lower.includes("my location") || lower.includes("where am i") || lower.includes("current location")) {
+        try {
+            updateMapOverlayStatus("Detecting GPS coordinates...");
+            const pos = await getUserLocation();
+            if (map) {
+                map.setCenter(pos);
+                map.setZoom(15);
+                new google.maps.Marker({
+                    position: pos,
+                    map: map,
+                    title: "Your Location",
+                    icon: {
+                        path: google.maps.SymbolPath.CIRCLE,
+                        scale: 9,
+                        fillColor: "#00ff9d",
+                        fillOpacity: 1,
+                        strokeColor: "#ffffff",
+                        strokeWeight: 2
+                    }
+                });
+            }
+            updateMapOverlayStatus("GPS Acquired");
+        } catch (err) {
+            updateMapOverlayStatus("Location detection error");
+        }
     }
 
-    // Send over WebSocket or HTTP fallback
+    // 2. Multi-Stop & Routing Queries ("from A to B via C" or "from A to B")
+    if (lower.includes("from ") && lower.includes(" to ")) {
+        extractAndRoute(text);
+    } 
+    // 3. Natural Language POI Discovery Triggers
+    else if (lower.includes("food") || lower.includes("restaurant") || lower.includes("delicac")) {
+        handleExplorePOIs("DELICACIES");
+    } else if (lower.includes("sightseeing") || lower.includes("monument") || lower.includes("tourist")) {
+        handleExplorePOIs("SIGHTSEEING");
+    } else if (lower.includes("hotel") || lower.includes("rest") || lower.includes("cafe")) {
+        handleExplorePOIs("RESTING");
+    }
+
+    // 4. Send chat message to WebSocket
     if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
         chatSocket.send(text);
     } else {
-        // Fallback HTTP chat call
         fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -297,8 +334,62 @@ function handleSendChatMessage() {
     }
 }
 
+// Parse "from [Origin] to [Destination] via/stopping at [Stop1, Stop2]"
+async function extractAndRoute(text) {
+    try {
+        const fromIdx = text.toLowerCase().indexOf("from ");
+        const toIdx = text.toLowerCase().indexOf(" to ");
+        const viaIdx = text.toLowerCase().indexOf(" via ");
+
+        let origin = "";
+        let destination = "";
+        let stops = [];
+
+        if (fromIdx !== -1 && toIdx !== -1) {
+            origin = text.substring(fromIdx + 5, toIdx).trim();
+
+            if (viaIdx !== -1 && viaIdx > toIdx) {
+                destination = text.substring(toIdx + 4, viaIdx).trim();
+                const stopsPart = text.substring(viaIdx + 5).trim();
+                stops = stopsPart.split(/,| and /).map(s => s.trim()).filter(Boolean);
+            } else {
+                destination = text.substring(toIdx + 4).trim();
+            }
+
+            updateMapOverlayStatus(`Calculating route: ${origin} ➔ ${destination}`);
+            currentItinerary = await calculateItineraryWithStops(origin, destination, stops);
+            
+            // Format itinerary automatically inside the itinerary tab
+            renderDirectionsItinerary(currentItinerary);
+            updateMapOverlayStatus("Multi-Stop Itinerary Active");
+        }
+    } catch (e) {
+        fetchAndDrawRoute(text);
+    }
+}
+
+function handleExplorePOIs(category) {
+    clearPOIMarkers();
+    if (!map) return;
+
+    if (currentItinerary.length > 0) {
+        updateMapOverlayStatus(`Populating ${category.toLowerCase()} along route...`);
+        currentItinerary.forEach((leg) => {
+            populatePOIs(map, leg.startLocation, category);
+            populatePOIs(map, leg.endLocation, category);
+        });
+    } else {
+        getUserLocation().then((loc) => {
+            updateMapOverlayStatus(`Populating nearby ${category.toLowerCase()}...`);
+            populatePOIs(map, loc, category);
+        }).catch(() => {
+            populatePOIs(map, { lat: 22.5726, lng: 88.3638 }, category);
+        });
+    }
+}
+
 // ==========================================================================
-// 4. MAP ROUTE PLOTTING
+// 4. MAP ROUTE PLOTTING FALLBACKS
 // ==========================================================================
 async function fetchAndDrawRoute(promptText) {
     try {
@@ -317,7 +408,6 @@ async function fetchAndDrawRoute(promptText) {
             updateMapOverlayStatus("Tactical Route Plotted");
         } else {
             updateMapOverlayStatus("Geocoding coordinates...");
-            // Fallback: try standard get-route geocoding
             fetchSimpleRouteCoords(promptText);
         }
     } catch (e) {
@@ -351,12 +441,10 @@ function drawRoutePolyline(points) {
 
     const path = points.map(([lat, lng]) => ({ lat: parseFloat(lat), lng: parseFloat(lng) }));
 
-    // Clear existing polyline & markers
     if (polylineOverlay) polylineOverlay.setMap(null);
     if (startMarker) startMarker.setMap(null);
     if (endMarker) endMarker.setMap(null);
 
-    // Create start and destination markers
     const startLoc = path[0];
     const endLoc = path[path.length - 1];
 
@@ -388,22 +476,19 @@ function drawRoutePolyline(points) {
         }
     });
 
-    // Draw glowing polyline
     polylineOverlay = new google.maps.Polyline({
         path: path,
         geodesic: true,
         strokeColor: "#00f3ff",
         strokeOpacity: 0.9,
-        strokeWeight: 5,
+        weight: 5,
         map: map
     });
 
-    // Adjust map view bounds to fit route
     const bounds = new google.maps.LatLngBounds();
     path.forEach(p => bounds.extend(p));
     map.fitBounds(bounds);
 
-    // Display route stats
     displayRouteStatsWidget(path);
 }
 
@@ -414,13 +499,12 @@ function displayRouteStatsWidget(path) {
 
     if (!widget || path.length < 2) return;
 
-    // Estimate straight-line distance sum
     let totalKm = 0;
     for (let i = 0; i < path.length - 1; i++) {
         totalKm += calculateHaversineDistance(path[i], path[i+1]);
     }
 
-    const totalMins = Math.round((totalKm / 65) * 60); // Est driving time at 65km/h
+    const totalMins = Math.round((totalKm / 65) * 60);
 
     if (distEl) distEl.textContent = `${totalKm.toFixed(1)} km`;
     if (durEl) durEl.textContent = `~${totalMins} mins`;
@@ -429,7 +513,7 @@ function displayRouteStatsWidget(path) {
 }
 
 function calculateHaversineDistance(p1, p2) {
-    const R = 6371; // km
+    const R = 6371;
     const dLat = (p2.lat - p1.lat) * Math.PI / 180;
     const dLng = (p2.lng - p1.lng) * Math.PI / 180;
     const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
@@ -440,8 +524,148 @@ function calculateHaversineDistance(p1, p2) {
 }
 
 // ==========================================================================
-// 5. ITINERARY CARDS RENDERING
+// 5. ENHANCED ITINERARY RENDERING & MAP ACTIONS
 // ==========================================================================
+function renderDirectionsItinerary(itineraryList) {
+    const displayContainer = document.getElementById('itineraryDisplay');
+    if (!displayContainer || !itineraryList.length) return;
+
+    displayContainer.innerHTML = `
+        <div class="itinerary-actions-header">
+            <span><i class="fa-solid fa-route"></i> Tactical Route (${itineraryList.length} Legs)</span>
+            <button class="action-btn-small" id="clearItineraryBtn"><i class="fa-solid fa-trash"></i> Reset</button>
+        </div>
+    `;
+
+    itineraryList.forEach((leg, index) => {
+        const card = document.createElement('div');
+        card.className = 'itinerary-card';
+        card.style.animationDelay = `${index * 0.08}s`;
+        card.innerHTML = `
+            <div class="itinerary-card-header">
+                <span class="day-badge">Leg ${leg.legNumber}</span>
+                <span class="card-location"><i class="fa-solid fa-clock"></i> ${leg.duration} &nbsp;|&nbsp; <i class="fa-solid fa-road"></i> ${leg.distance}</span>
+            </div>
+            <ul class="activity-list">
+                <li class="activity-item">
+                    <i class="fa-solid fa-circle-dot" style="color: #00ff9d;"></i>
+                    <span><strong>Origin:</strong> ${leg.startAddress}</span>
+                </li>
+                <li class="activity-item">
+                    <i class="fa-solid fa-location-crosshairs" style="color: #00f3ff;"></i>
+                    <span><strong>Destination:</strong> ${leg.endAddress}</span>
+                </li>
+            </ul>
+            <div class="card-footer-controls">
+                <button class="focus-map-btn" data-lat="${leg.startLocation.lat}" data-lng="${leg.startLocation.lng}">
+                    <i class="fa-solid fa-eye"></i> Focus Leg
+                </button>
+            </div>
+        `;
+        displayContainer.appendChild(card);
+    });
+
+    attachItineraryEventListeners();
+
+    const itineraryTabBtn = document.querySelector('.tab-btn[data-tab="itineraryTab"]');
+    if (itineraryTabBtn) itineraryTabBtn.click();
+}
+
+function renderItineraryCards(data) {
+    const displayContainer = document.getElementById('itineraryDisplay');
+    if (!displayContainer) return;
+
+    if (!data.itinerary || !Array.isArray(data.itinerary) || data.itinerary.length === 0) {
+        displayContainer.innerHTML = `
+            <div class="empty-itinerary-placeholder">
+                <i class="fa-solid fa-compass"></i>
+                <h3>No Itinerary Plan Generated</h3>
+                <p>Try asking for a travel plan (e.g., "3 day trip for Tokyo").</p>
+            </div>
+        `;
+        return;
+    }
+
+    displayContainer.innerHTML = `
+        <div class="itinerary-actions-header">
+            <span><i class="fa-solid fa-timeline"></i> AI Journey Schedule (${data.itinerary.length} Days)</span>
+            <button class="action-btn-small" id="clearItineraryBtn"><i class="fa-solid fa-trash"></i> Clear</button>
+        </div>
+    `;
+
+    data.itinerary.forEach((dayItem, index) => {
+        const card = document.createElement('div');
+        card.className = 'itinerary-card';
+        card.style.animationDelay = `${index * 0.08}s`;
+
+        const activitiesHtml = (dayItem.activities || []).map(act => `
+            <li class="activity-item">
+                <i class="fa-solid fa-angle-right"></i>
+                <span>${act}</span>
+            </li>
+        `).join('');
+
+        card.innerHTML = `
+            <div class="itinerary-card-header">
+                <span class="day-badge">${dayItem.day || `Day ${index + 1}`}</span>
+                <span class="card-location"><i class="fa-solid fa-location-dot"></i> ${dayItem.location || 'Excursion'}</span>
+            </div>
+            <ul class="activity-list">
+                ${activitiesHtml}
+            </ul>
+            <div class="card-footer-controls">
+                <button class="focus-map-btn" data-location="${dayItem.location}">
+                    <i class="fa-solid fa-crosshairs"></i> Locate
+                </button>
+            </div>
+        `;
+
+        displayContainer.appendChild(card);
+    });
+
+    attachItineraryEventListeners();
+}
+
+function attachItineraryEventListeners() {
+    // Focus location on map
+    document.querySelectorAll('.focus-map-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const lat = parseFloat(btn.getAttribute('data-lat'));
+            const lng = parseFloat(btn.getAttribute('data-lng'));
+            const locationName = btn.getAttribute('data-location');
+
+            if (!isNaN(lat) && !isNaN(lng) && map) {
+                map.panTo({ lat, lng });
+                map.setZoom(14);
+            } else if (locationName && map && window.google) {
+                const geocoder = new google.maps.Geocoder();
+                geocoder.geocode({ address: locationName }, (results, status) => {
+                    if (status === 'OK' && results[0]) {
+                        map.panTo(results[0].geometry.location);
+                        map.setZoom(13);
+                    }
+                });
+            }
+        });
+    });
+
+    // Reset itinerary button
+    const clearBtn = document.getElementById('clearItineraryBtn');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            const displayContainer = document.getElementById('itineraryDisplay');
+            displayContainer.innerHTML = `
+                <div class="empty-itinerary-placeholder">
+                    <i class="fa-solid fa-compass"></i>
+                    <h3>Itinerary Cleared</h3>
+                    <p>Select a quick query or ask the AI to craft your next route.</p>
+                </div>
+            `;
+        });
+    }
+}
+
+
 function handleGenerateItinerary() {
     const lastUserMsg = getLastUserQuery();
     if (lastUserMsg) {
@@ -481,7 +705,6 @@ async function fetchItineraryPlan(promptText) {
         const data = await response.json();
         renderItineraryCards(data);
 
-        // Switch to itinerary tab automatically
         const itineraryTabBtn = document.querySelector('.tab-btn[data-tab="itineraryTab"]');
         if (itineraryTabBtn) itineraryTabBtn.click();
 
@@ -496,49 +719,6 @@ async function fetchItineraryPlan(promptText) {
             `;
         }
     }
-}
-
-function renderItineraryCards(data) {
-    const displayContainer = document.getElementById('itineraryDisplay');
-    if (!displayContainer) return;
-
-    if (!data.itinerary || !Array.isArray(data.itinerary) || data.itinerary.length === 0) {
-        displayContainer.innerHTML = `
-            <div class="empty-itinerary-placeholder">
-                <i class="fa-solid fa-compass"></i>
-                <h3>No Itinerary Plan Found</h3>
-                <p>Try asking for a specific destination (e.g. "3 day plan for Tokyo").</p>
-            </div>
-        `;
-        return;
-    }
-
-    displayContainer.innerHTML = ''; // Clear placeholder
-
-    data.itinerary.forEach((dayItem, index) => {
-        const card = document.createElement('div');
-        card.className = 'itinerary-card';
-        card.style.animationDelay = `${index * 0.1}s`;
-
-        const activitiesHtml = (dayItem.activities || []).map(act => `
-            <li class="activity-item">
-                <i class="fa-solid fa-check-double"></i>
-                <span>${act}</span>
-            </li>
-        `).join('');
-
-        card.innerHTML = `
-            <div class="itinerary-card-header">
-                <span class="day-badge">${dayItem.day || `Day ${index + 1}`}</span>
-                <span class="card-location"><i class="fa-solid fa-location-dot"></i> ${dayItem.location || 'Explore Location'}</span>
-            </div>
-            <ul class="activity-list">
-                ${activitiesHtml}
-            </ul>
-        `;
-
-        displayContainer.appendChild(card);
-    });
 }
 
 // ==========================================================================
@@ -615,11 +795,9 @@ function setupTabSwitching() {
         btn.addEventListener('click', () => {
             const targetTab = btn.getAttribute('data-tab');
 
-            // Deactivate all
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
 
-            // Activate target
             btn.classList.add('active');
             const targetEl = document.getElementById(targetTab);
             if (targetEl) targetEl.classList.add('active');
@@ -674,7 +852,6 @@ function initCanvasParticles() {
     function animate() {
         ctx.clearRect(0, 0, width, height);
 
-        // Draw grid lines
         ctx.strokeStyle = "rgba(0, 243, 255, 0.03)";
         ctx.lineWidth = 1;
         const gridSize = 60;
@@ -691,7 +868,6 @@ function initCanvasParticles() {
             ctx.stroke();
         }
 
-        // Draw particles
         particles.forEach(p => {
             p.x += p.vx;
             p.y += p.vy;
@@ -713,27 +889,16 @@ function initCanvasParticles() {
     animate();
 }
 
-function addItineraryMarkers(itinerary) {
-    const geocoder = new google.maps.Geocoder();
-
-    itinerary.forEach(day => {
-        geocoder.geocode({ address: day.location }, (results, status) => {
-            if (status === 'OK') {
-                new google.maps.Marker({
-                    map: map,
-                    position: results[0].geometry.location,
-                    title: `${day.day}: ${day.location}`
-                });
-            }
-        });
-    });
+// Function to strip unicode emojis and pictographs
+function sanitizeCyberText(text) {
+    if (!text) return "";
+    return text
+        .replace(/[\u{1F600}-\u{1F64F}]/gu, '') // Emoticons
+        .replace(/[\u{1F300}-\u{1F5FF}]/gu, '') // Symbols & Pictographs
+        .replace(/[\u{1F680}-\u{1F6FF}]/gu, '') // Transport & Map
+        .replace(/[\u{1F1E0}-\u{1F1FF}]/gu, '') // Flags
+        .replace(/[\u{2600}-\u{26FF}]/gu, '')   // Misc symbols (stars, cars, etc.)
+        .replace(/[\u{2700}-\u{27BF}]/gu, '')   // Dingbats
+        .replace(/[\u{1F900}-\u{1F9FF}]/gu, '') // Supplemental symbols
+        .replace(/[\u{1FA70}-\u{1FAFF}]/gu, '');
 }
-
-const scroller = document.getElementById('chatContent');
-if (scroller) {
-    scroller.scrollTo({
-        top: scroller.scrollHeight,
-        behavior: "smooth"
-    });
-}
-

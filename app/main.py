@@ -16,7 +16,7 @@ app = FastAPI(
     version="2.0.0"
 )
 
-# Enable CORS for cross-origin frontend support
+# Enable CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -47,4 +47,3 @@ async def health_check():
 @app.get("/")
 async def serve_index():
     return FileResponse(BASE_DIR / "index.html")
-
