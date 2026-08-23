@@ -169,15 +169,16 @@ function createAssistantMessageCard() {
 }
 
 function renderStreamingMarkdown(msgObj, text) {
+    const cleanText = sanitizeCyberText(text);
     let htmlContent = "";
     if (window.marked && typeof window.marked.parse === 'function') {
         try {
-            htmlContent = marked.parse(text);
+            htmlContent = marked.parse(cleanText);
         } catch (e) {
-            htmlContent = formatCustomMarkdown(text);
+            htmlContent = formatCustomMarkdown(cleanText);
         }
     } else {
-        htmlContent = formatCustomMarkdown(text);
+        htmlContent = formatCustomMarkdown(cleanText);
     }
 
     msgObj.content.innerHTML = htmlContent;
@@ -200,14 +201,21 @@ function formatCustomMarkdown(text) {
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;");
 
-    escaped = escaped.replace(/^### (.*$)/gim, '<h3>$1</h3>');
-    escaped = escaped.replace(/^## (.*$)/gim, '<h2>$1</h2>');
-    escaped = escaped.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+    // Clean Section Titles
+    escaped = escaped.replace(/^### (.*$)/gim, '<div class="chat-section-header">$1</div>');
+    escaped = escaped.replace(/^## (.*$)/gim, '<div class="chat-section-header main">$1</div>');
+    escaped = escaped.replace(/^# (.*$)/gim, '<div class="chat-section-header main">$1</div>');
+
+    // Bold, Italics, Code
     escaped = escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
     escaped = escaped.replace(/\*(.*?)\*/g, '<em>$1</em>');
     escaped = escaped.replace(/`(.*?)`/g, '<code>$1</code>');
-    escaped = escaped.replace(/^\- (.*$)/gim, '<ul><li>$1</li></ul>');
-    escaped = escaped.replace(/<\/ul>\s*<ul>/g, '');
+
+    // Bullet points
+    escaped = escaped.replace(/^\- (.*$)/gim, '<li class="chat-bullet">$1</li>');
+    escaped = escaped.replace(/(<li class="chat-bullet">.*<\/li>)/gims, '<ul class="chat-list">$1</ul>');
+
+    // Line breaks
     escaped = escaped.replace(/\n/g, '<br>');
 
     return escaped;
@@ -516,39 +524,147 @@ function calculateHaversineDistance(p1, p2) {
 }
 
 // ==========================================================================
-// 5. ITINERARY RENDERING & GENERATION
+// 5. ENHANCED ITINERARY RENDERING & MAP ACTIONS
 // ==========================================================================
 function renderDirectionsItinerary(itineraryList) {
     const displayContainer = document.getElementById('itineraryDisplay');
     if (!displayContainer || !itineraryList.length) return;
 
-    displayContainer.innerHTML = '';
+    displayContainer.innerHTML = `
+        <div class="itinerary-actions-header">
+            <span><i class="fa-solid fa-route"></i> Tactical Route (${itineraryList.length} Legs)</span>
+            <button class="action-btn-small" id="clearItineraryBtn"><i class="fa-solid fa-trash"></i> Reset</button>
+        </div>
+    `;
 
-    itineraryList.forEach((leg) => {
+    itineraryList.forEach((leg, index) => {
         const card = document.createElement('div');
         card.className = 'itinerary-card';
+        card.style.animationDelay = `${index * 0.08}s`;
         card.innerHTML = `
             <div class="itinerary-card-header">
                 <span class="day-badge">Leg ${leg.legNumber}</span>
-                <span class="card-location"><i class="fa-solid fa-route"></i> ${leg.distance} (${leg.duration})</span>
+                <span class="card-location"><i class="fa-solid fa-clock"></i> ${leg.duration} &nbsp;|&nbsp; <i class="fa-solid fa-road"></i> ${leg.distance}</span>
             </div>
             <ul class="activity-list">
                 <li class="activity-item">
-                    <i class="fa-solid fa-location-dot" style="color: var(--green-accent);"></i>
-                    <span><strong>From:</strong> ${leg.startAddress}</span>
+                    <i class="fa-solid fa-circle-dot" style="color: #00ff9d;"></i>
+                    <span><strong>Origin:</strong> ${leg.startAddress}</span>
                 </li>
                 <li class="activity-item">
-                    <i class="fa-solid fa-flag-checkered" style="color: var(--cyan-primary);"></i>
-                    <span><strong>To:</strong> ${leg.endAddress}</span>
+                    <i class="fa-solid fa-location-crosshairs" style="color: #00f3ff;"></i>
+                    <span><strong>Destination:</strong> ${leg.endAddress}</span>
                 </li>
             </ul>
+            <div class="card-footer-controls">
+                <button class="focus-map-btn" data-lat="${leg.startLocation.lat}" data-lng="${leg.startLocation.lng}">
+                    <i class="fa-solid fa-eye"></i> Focus Leg
+                </button>
+            </div>
         `;
         displayContainer.appendChild(card);
     });
 
+    attachItineraryEventListeners();
+
     const itineraryTabBtn = document.querySelector('.tab-btn[data-tab="itineraryTab"]');
     if (itineraryTabBtn) itineraryTabBtn.click();
 }
+
+function renderItineraryCards(data) {
+    const displayContainer = document.getElementById('itineraryDisplay');
+    if (!displayContainer) return;
+
+    if (!data.itinerary || !Array.isArray(data.itinerary) || data.itinerary.length === 0) {
+        displayContainer.innerHTML = `
+            <div class="empty-itinerary-placeholder">
+                <i class="fa-solid fa-compass"></i>
+                <h3>No Itinerary Plan Generated</h3>
+                <p>Try asking for a travel plan (e.g., "3 day trip for Tokyo").</p>
+            </div>
+        `;
+        return;
+    }
+
+    displayContainer.innerHTML = `
+        <div class="itinerary-actions-header">
+            <span><i class="fa-solid fa-timeline"></i> AI Journey Schedule (${data.itinerary.length} Days)</span>
+            <button class="action-btn-small" id="clearItineraryBtn"><i class="fa-solid fa-trash"></i> Clear</button>
+        </div>
+    `;
+
+    data.itinerary.forEach((dayItem, index) => {
+        const card = document.createElement('div');
+        card.className = 'itinerary-card';
+        card.style.animationDelay = `${index * 0.08}s`;
+
+        const activitiesHtml = (dayItem.activities || []).map(act => `
+            <li class="activity-item">
+                <i class="fa-solid fa-angle-right"></i>
+                <span>${act}</span>
+            </li>
+        `).join('');
+
+        card.innerHTML = `
+            <div class="itinerary-card-header">
+                <span class="day-badge">${dayItem.day || `Day ${index + 1}`}</span>
+                <span class="card-location"><i class="fa-solid fa-location-dot"></i> ${dayItem.location || 'Excursion'}</span>
+            </div>
+            <ul class="activity-list">
+                ${activitiesHtml}
+            </ul>
+            <div class="card-footer-controls">
+                <button class="focus-map-btn" data-location="${dayItem.location}">
+                    <i class="fa-solid fa-crosshairs"></i> Locate
+                </button>
+            </div>
+        `;
+
+        displayContainer.appendChild(card);
+    });
+
+    attachItineraryEventListeners();
+}
+
+function attachItineraryEventListeners() {
+    // Focus location on map
+    document.querySelectorAll('.focus-map-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const lat = parseFloat(btn.getAttribute('data-lat'));
+            const lng = parseFloat(btn.getAttribute('data-lng'));
+            const locationName = btn.getAttribute('data-location');
+
+            if (!isNaN(lat) && !isNaN(lng) && map) {
+                map.panTo({ lat, lng });
+                map.setZoom(14);
+            } else if (locationName && map && window.google) {
+                const geocoder = new google.maps.Geocoder();
+                geocoder.geocode({ address: locationName }, (results, status) => {
+                    if (status === 'OK' && results[0]) {
+                        map.panTo(results[0].geometry.location);
+                        map.setZoom(13);
+                    }
+                });
+            }
+        });
+    });
+
+    // Reset itinerary button
+    const clearBtn = document.getElementById('clearItineraryBtn');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            const displayContainer = document.getElementById('itineraryDisplay');
+            displayContainer.innerHTML = `
+                <div class="empty-itinerary-placeholder">
+                    <i class="fa-solid fa-compass"></i>
+                    <h3>Itinerary Cleared</h3>
+                    <p>Select a quick query or ask the AI to craft your next route.</p>
+                </div>
+            `;
+        });
+    }
+}
+
 
 function handleGenerateItinerary() {
     const lastUserMsg = getLastUserQuery();
@@ -603,49 +719,6 @@ async function fetchItineraryPlan(promptText) {
             `;
         }
     }
-}
-
-function renderItineraryCards(data) {
-    const displayContainer = document.getElementById('itineraryDisplay');
-    if (!displayContainer) return;
-
-    if (!data.itinerary || !Array.isArray(data.itinerary) || data.itinerary.length === 0) {
-        displayContainer.innerHTML = `
-            <div class="empty-itinerary-placeholder">
-                <i class="fa-solid fa-compass"></i>
-                <h3>No Itinerary Plan Found</h3>
-                <p>Try asking for a specific destination (e.g. "3 day plan for Tokyo").</p>
-            </div>
-        `;
-        return;
-    }
-
-    displayContainer.innerHTML = '';
-
-    data.itinerary.forEach((dayItem, index) => {
-        const card = document.createElement('div');
-        card.className = 'itinerary-card';
-        card.style.animationDelay = `${index * 0.1}s`;
-
-        const activitiesHtml = (dayItem.activities || []).map(act => `
-            <li class="activity-item">
-                <i class="fa-solid fa-check-double"></i>
-                <span>${act}</span>
-            </li>
-        `).join('');
-
-        card.innerHTML = `
-            <div class="itinerary-card-header">
-                <span class="day-badge">${dayItem.day || `Day ${index + 1}`}</span>
-                <span class="card-location"><i class="fa-solid fa-location-dot"></i> ${dayItem.location || 'Explore Location'}</span>
-            </div>
-            <ul class="activity-list">
-                ${activitiesHtml}
-            </ul>
-        `;
-
-        displayContainer.appendChild(card);
-    });
 }
 
 // ==========================================================================
@@ -814,4 +887,18 @@ function initCanvasParticles() {
     }
 
     animate();
+}
+
+// Function to strip unicode emojis and pictographs
+function sanitizeCyberText(text) {
+    if (!text) return "";
+    return text
+        .replace(/[\u{1F600}-\u{1F64F}]/gu, '') // Emoticons
+        .replace(/[\u{1F300}-\u{1F5FF}]/gu, '') // Symbols & Pictographs
+        .replace(/[\u{1F680}-\u{1F6FF}]/gu, '') // Transport & Map
+        .replace(/[\u{1F1E0}-\u{1F1FF}]/gu, '') // Flags
+        .replace(/[\u{2600}-\u{26FF}]/gu, '')   // Misc symbols (stars, cars, etc.)
+        .replace(/[\u{2700}-\u{27BF}]/gu, '')   // Dingbats
+        .replace(/[\u{1F900}-\u{1F9FF}]/gu, '') // Supplemental symbols
+        .replace(/[\u{1FA70}-\u{1FAFF}]/gu, '');
 }
