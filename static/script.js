@@ -18,7 +18,16 @@ let intermediateStops = [];
 // 1. INITIALIZATION & SETUP
 // ==========================================================================
 document.addEventListener('DOMContentLoaded', async () => {
-    initCinematicIntro();
+    // Passing callback to extract live Google Map center coordinates
+    initCinematicIntro(() => {
+        if (map && map.getCenter) {
+            return {
+                lat: map.getCenter().lat(),
+                lng: map.getCenter().lng()
+            };
+        }
+        return { lat: 22.5726, lng: 88.3638 }; // Default Kolkata Coordinates
+    });
     initCanvasParticles();
     setupTabSwitching();
     setupQuickPrompts();
