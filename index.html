@@ -17,6 +17,36 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
 </head>
 <body class="cyber-theme">
+
+    <!-- Three.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <!-- 3D Cinematic Intro Loading Overlay -->
+    <div id="cyberIntroOverlay" class="cyber-intro-overlay">
+        <div id="threeDCanvasContainer"></div>
+        <div class="intro-content">
+            <div class="intro-glitch-title">NAVSMART</div>
+            <div class="intro-tagline">SMART TRAVEL & ROUTE ASSISTANT</div>
+            
+            <div class="intro-status-box">
+                <div class="intro-status-line">
+                    <span class="status-indicator"></span> Global GPS Maps: <span class="cyan-text">READY</span>
+                </div>
+                <div class="intro-status-line">
+                    <span class="status-indicator"></span> Multi-Stop Routing: <span class="green-text">ACTIVE</span>
+                </div>
+                <div class="intro-status-line">
+                    <span class="status-indicator"></span> AI Travel Guide: <span class="purple-text">CONNECTED</span>
+                </div>
+            </div>
+
+            <button id="enterCommandCenterBtn" class="enter-btn">
+                <span>START EXPLORING</span>
+                <i class="fa-solid fa-arrow-right"></i>
+            </button>
+        </div>
+    </div>
+
     <!-- Animated Cyber Grid & Canvas Particles -->
     <canvas id="bgCanvas"></canvas>
 

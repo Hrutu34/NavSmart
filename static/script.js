@@ -3,6 +3,8 @@
    ========================================================================== */
 import { getUserLocation, populatePOIs, clearPOIMarkers } from "./mapService.js";
 import { initDirections, calculateItineraryWithStops } from "./routeService.js";
+import { initCinematicIntro } from "./introCinematic.js";
+
 
 let map, polylineOverlay, startMarker, endMarker;
 let chatSocket = null;
@@ -16,9 +18,22 @@ let intermediateStops = [];
 // 1. INITIALIZATION & SETUP
 // ==========================================================================
 document.addEventListener('DOMContentLoaded', async () => {
+    // Passing callback to extract live Google Map center coordinates
+   initCinematicIntro(() => {
+        if (map) {
+            const center = map.getCenter ? map.getCenter() : null;
+            return {
+                lat: center ? center.lat() : 20.5937,
+                lng: center ? center.lng() : 78.9629,
+                zoom: 125 // Detailed regional zoom focus
+            };
+        }
+        return { lat: 20.5937, lng: 78.9629, zoom: 5 };
+    });
     initCanvasParticles();
     setupTabSwitching();
     setupQuickPrompts();
+    
     
     // Fetch frontend configuration (e.g. Google Maps API Key)
     try {
