@@ -1,5 +1,5 @@
 /* ==========================================================================
-   NAVSMART IMMERSIVE 3D GLOBE ENGINE - CINEMATIC FOCUS & DOCKING
+   NAVSMART IMMERSIVE 3D GLOBE ENGINE - PRECISION MAP TARGETING & TECHNO AUDIO
    ========================================================================== */
 export function initCinematicIntro(getMapCenterCallback) {
     const overlay = document.getElementById('cyberIntroOverlay');
@@ -8,6 +8,47 @@ export function initCinematicIntro(getMapCenterCallback) {
     const introContent = document.querySelector('.intro-content');
 
     if (!container || !overlay || !window.THREE) return;
+
+    // --- Clean Cybernetic Web Audio Synth (Reverted to Sleek Tech Sound) ---
+    let audioCtx = null;
+    function playCyberSound(type) {
+        try {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            const now = audioCtx.currentTime;
+
+            if (type === 'click') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(600, now);
+                osc.frequency.exponentialRampToValueAtTime(1000, now + 0.08);
+                gain.gain.setValueAtTime(0.08, now);
+                gain.gain.linearRampToValueAtTime(0.001, now + 0.1);
+                osc.start(now);
+                osc.stop(now + 0.1);
+            } else if (type === 'whoosh') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(90, now);
+                osc.frequency.exponentialRampToValueAtTime(320, now + 1.2);
+                gain.gain.setValueAtTime(0.001, now);
+                gain.gain.linearRampToValueAtTime(0.12, now + 0.4);
+                gain.gain.linearRampToValueAtTime(0.001, now + 1.3);
+                osc.start(now);
+                osc.stop(now + 1.3);
+            }
+        } catch (e) {
+            // Audio context requires user gesture
+        }
+    }
 
     // 1. Scene, Camera & WebGL Renderer
     const scene = new THREE.Scene();
@@ -37,7 +78,7 @@ export function initCinematicIntro(getMapCenterCallback) {
 
     const GLOBE_RADIUS = 58;
 
-    // 3.1 Continents Texture
+    // 3.1 Continents Texture Mapping
     function createCyberEarthTexture() {
         const canvas = document.createElement('canvas');
         canvas.width = 2048;
@@ -189,7 +230,6 @@ export function initCinematicIntro(getMapCenterCallback) {
     window.addEventListener('touchmove', onPointerMove, { passive: true });
     window.addEventListener('touchend', onPointerUp);
 
-    // Map GPS Coordinates to standard 3D Equirectangular Sphere coordinates
     function latLngToVector3(lat, lng, radius) {
         const phi = (90 - lat) * (Math.PI / 180);
         const theta = (lng + 180) * (Math.PI / 180);
@@ -200,46 +240,39 @@ export function initCinematicIntro(getMapCenterCallback) {
         );
     }
 
-    // 5. Animation State & Motion Variables
+    // 5. Animation State & Smooth Focus Calculation
     let animationFrameId;
     let isFocusing = false;
     let focusStartTime = 0;
-    const FOCUS_DURATION = 2200; // 2.2 seconds of calm rotation and focus zoom
+    const FOCUS_DURATION = 2400;
 
     const startQuat = new THREE.Quaternion();
     const targetQuat = new THREE.Quaternion();
     const startCamZ = 220;
-    const targetCamZ = 120;
+    const targetCamZ = 125;
 
     function animate(currentTime) {
         animationFrameId = requestAnimationFrame(animate);
 
         if (!isFocusing) {
-            // Calm idle rotation with gentle drag damping
             if (!isDragging) {
                 velocity.x *= 0.95;
-                velocity.y = velocity.y * 0.95 + 0.0012 * 0.05;
+                velocity.y = velocity.y * 0.95 + 0.001 * 0.05;
                 earthGroup.rotation.y += velocity.y;
                 earthGroup.rotation.x *= 0.96;
             }
             starField.rotation.y -= 0.0003;
         } else {
-            // Smoothly ease rotation towards target GPS coordinate
             const elapsed = currentTime - focusStartTime;
             const progress = Math.min(1.0, elapsed / FOCUS_DURATION);
 
-            // Smooth cubic ease-in-out
             const ease = progress < 0.5 
                 ? 4 * progress * progress * progress 
                 : 1 - Math.pow(-2 * progress + 2, 3) / 2;
 
-            // Interpolate rotation
             earthGroup.quaternion.slerpQuaternions(startQuat, targetQuat, ease);
-
-            // Smoothly zoom in to frame the region
             camera.position.z = startCamZ + (targetCamZ - startCamZ) * ease;
 
-            // Pulse beacon ring
             const scale = 1 + Math.sin(Date.now() * 0.012) * 0.35;
             pinBeacon.scale.set(scale, scale, 1);
         }
@@ -248,7 +281,6 @@ export function initCinematicIntro(getMapCenterCallback) {
     }
     animate(performance.now());
 
-    // 6. Dynamic Resize Observer
     function handleResize() {
         if (!container) return;
         const width = container.clientWidth || window.innerWidth;
@@ -259,14 +291,17 @@ export function initCinematicIntro(getMapCenterCallback) {
     }
     window.addEventListener('resize', handleResize);
 
-    // 7. Action Button Trigger Sequence
+    // 6. Action Button Trigger Sequence
     if (enterBtn) {
         enterBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             enterBtn.disabled = true;
 
-            // Step A: Extract current Map Center (e.g., Kolkata default or active GPS)
-            let lat = 22.5726, lng = 88.3638;
+            playCyberSound('click');
+            playCyberSound('whoosh');
+
+            // Set default focus to India (Center coordinates: Lat 20.5937, Lng 78.9629)
+            let lat = 20.5937, lng = 78.9629;
             if (typeof getMapCenterCallback === 'function') {
                 const c = getMapCenterCallback();
                 if (c && c.lat && c.lng) { 
@@ -275,44 +310,41 @@ export function initCinematicIntro(getMapCenterCallback) {
                 }
             }
 
-            // Step B: Calculate Target Coordinate on Globe Surface
+            // Target Pin Placement
             const targetVec = latLngToVector3(lat, lng, GLOBE_RADIUS);
             pinGroup.position.copy(targetVec);
             pinGroup.lookAt(targetVec.clone().multiplyScalar(2));
             pinGroup.visible = true;
 
-            // Step C: Set Target Quaternion to rotate location directly facing camera (+Z)
+            // Accurate Target Rotation Orientation via LookAt Matrix Calculation
             startQuat.copy(earthGroup.quaternion);
-            targetQuat.setFromUnitVectors(
-                targetVec.clone().normalize(),
-                new THREE.Vector3(0, 0, 1)
-            );
 
-            // Step D: Start Phase 1 (Smooth Rotation & Zoom)
+            const tempObj = new THREE.Object3D();
+            tempObj.position.copy(earthGroup.position);
+            tempObj.quaternion.copy(earthGroup.quaternion);
+            tempObj.lookAt(targetVec);
+            tempObj.rotateY(Math.PI);
+            targetQuat.copy(tempObj.quaternion);
+
             isFocusing = true;
             focusStartTime = performance.now();
 
-            // Fade out intro text card
             if (introContent) {
                 introContent.classList.add('hide-ui');
             }
 
-            // Step E: After smooth rotation completes (~2.2s), start Phase 2 (Tile Morph & Docking)
+            // Staged Transition Sequence
             setTimeout(() => {
-                // Draw glowing HUD frame
                 overlay.classList.add('draw-border');
 
                 setTimeout(() => {
                     const mapElement = document.getElementById('map') || document.querySelector('.left-panel');
                     if (mapElement) {
                         const rect = mapElement.getBoundingClientRect();
-
-                        // Continuously adjust Three.js viewport during shrink animation
                         const resizeInterval = setInterval(handleResize, 16);
 
-                        // Morph 3D canvas container to match Google Maps panel dimensions
                         container.style.position = 'fixed';
-                        container.style.transition = 'all 1.1s cubic-bezier(0.16, 1, 0.3, 1)';
+                        container.style.transition = 'all 1.4s cubic-bezier(0.16, 1, 0.3, 1)';
                         container.style.top = `${rect.top}px`;
                         container.style.left = `${rect.left}px`;
                         container.style.width = `${rect.width}px`;
@@ -320,20 +352,18 @@ export function initCinematicIntro(getMapCenterCallback) {
                         container.style.borderRadius = '14px';
 
                         overlay.classList.add('morphing');
-
-                        setTimeout(() => clearInterval(resizeInterval), 1200);
+                        setTimeout(() => clearInterval(resizeInterval), 1450);
                     }
 
-                    // Step F: Reveal the underlying UI and cleanly remove the overlay
                     setTimeout(() => {
                         overlay.classList.add('reveal-app');
                         setTimeout(() => {
                             cancelAnimationFrame(animationFrameId);
                             overlay.remove();
-                        }, 900);
-                    }, 1050);
+                        }, 1200);
+                    }, 1200);
 
-                }, 400); // Small pause for the HUD border to settle
+                }, 400);
 
             }, FOCUS_DURATION);
         });

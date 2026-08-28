@@ -19,14 +19,16 @@ let intermediateStops = [];
 // ==========================================================================
 document.addEventListener('DOMContentLoaded', async () => {
     // Passing callback to extract live Google Map center coordinates
-    initCinematicIntro(() => {
-        if (map && map.getCenter) {
+   initCinematicIntro(() => {
+        if (map) {
+            const center = map.getCenter ? map.getCenter() : null;
             return {
-                lat: map.getCenter().lat(),
-                lng: map.getCenter().lng()
+                lat: center ? center.lat() : 20.5937,
+                lng: center ? center.lng() : 78.9629,
+                zoom: 125 // Detailed regional zoom focus
             };
         }
-        return { lat: 22.5726, lng: 88.3638 }; // Default Kolkata Coordinates
+        return { lat: 20.5937, lng: 78.9629, zoom: 5 };
     });
     initCanvasParticles();
     setupTabSwitching();
