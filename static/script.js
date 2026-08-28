@@ -3,6 +3,8 @@
    ========================================================================== */
 import { getUserLocation, populatePOIs, clearPOIMarkers } from "./mapService.js";
 import { initDirections, calculateItineraryWithStops } from "./routeService.js";
+import { initCinematicIntro } from "./introCinematic.js";
+
 
 let map, polylineOverlay, startMarker, endMarker;
 let chatSocket = null;
@@ -16,9 +18,11 @@ let intermediateStops = [];
 // 1. INITIALIZATION & SETUP
 // ==========================================================================
 document.addEventListener('DOMContentLoaded', async () => {
+    initCinematicIntro();
     initCanvasParticles();
     setupTabSwitching();
     setupQuickPrompts();
+    
     
     // Fetch frontend configuration (e.g. Google Maps API Key)
     try {

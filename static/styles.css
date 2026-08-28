@@ -1,4 +1,126 @@
 /* ==========================================================================
+   3D CINEMATIC INTRO LOADING SCREEN
+   ========================================================================== */
+.cyber-intro-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: radial-gradient(circle at center, #0b1528 0%, #03060c 100%);
+    z-index: 99999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: opacity 1.2s cubic-bezier(0.16, 1, 0.3, 1), visibility 1.2s;
+}
+
+.cyber-intro-overlay.fade-out {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+#threeDCanvasContainer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    pointer-events: none;
+}
+
+.intro-content {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    max-width: 650px;
+    padding: 24px;
+}
+
+.intro-glitch-title {
+    font-family: var(--font-heading);
+    font-size: 3.5rem;
+    font-weight: 900;
+    color: #ffffff;
+    letter-spacing: 6px;
+    text-shadow: 0 0 20px var(--cyan-primary, #00f3ff), 0 0 40px rgba(0, 243, 255, 0.4);
+    margin-bottom: 8px;
+}
+
+.intro-tagline {
+    font-family: var(--font-heading);
+    font-size: 0.85rem;
+    letter-spacing: 3px;
+    color: var(--cyan-primary, #00f3ff);
+    margin-bottom: 24px;
+    text-transform: uppercase;
+}
+
+.intro-status-box {
+    background: rgba(13, 19, 33, 0.7);
+    border: 1px solid rgba(0, 243, 255, 0.25);
+    border-radius: 8px;
+    padding: 12px 20px;
+    margin-bottom: 30px;
+    backdrop-filter: blur(10px);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-family: var(--font-code, monospace);
+    font-size: 0.8rem;
+}
+
+.intro-status-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #94a3b8;
+}
+
+.status-indicator {
+    width: 6px;
+    height: 6px;
+    background: #00ff9d;
+    border-radius: 50%;
+    box-shadow: 0 0 8px #00ff9d;
+}
+
+.cyan-text { color: #00f3ff; }
+.green-text { color: #00ff9d; }
+.purple-text { color: #a855f7; }
+
+.enter-btn {
+    position: relative;
+    background: linear-gradient(135deg, rgba(0, 243, 255, 0.2), rgba(168, 85, 247, 0.2));
+    border: 1px solid var(--cyan-primary, #00f3ff);
+    color: #ffffff;
+    padding: 14px 36px;
+    font-family: var(--font-heading);
+    font-size: 0.95rem;
+    letter-spacing: 2px;
+    font-weight: 700;
+    border-radius: 30px;
+    cursor: pointer;
+    box-shadow: 0 0 25px rgba(0, 243, 255, 0.35);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.enter-btn:hover {
+    background: var(--cyan-primary, #00f3ff);
+    color: #050811;
+    box-shadow: 0 0 40px var(--cyan-primary, #00f3ff);
+    transform: scale(1.05);
+}
+
+/* ==========================================================================
    NAVSMART - FUTURISTIC CYBER COMMAND CENTER STYLES
    ========================================================================== */
 

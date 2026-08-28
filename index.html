@@ -17,6 +17,30 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
 </head>
 <body class="cyber-theme">
+
+    <!-- Three.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <!-- 3D Cinematic Intro Loading Overlay -->
+    <div id="cyberIntroOverlay" class="cyber-intro-overlay">
+        <div id="threeDCanvasContainer"></div>
+        <div class="intro-content">
+            <div class="intro-glitch-title" data-text="NAVSMART">NAVSMART</div>
+            <div class="intro-tagline">QUANTUM NAVIGATION & TACTICAL ROUTE ENGINE</div>
+            
+            <div class="intro-status-box">
+                <div class="intro-status-line"><span class="status-indicator"></span> SATELLITE TELEMETRY: <span class="cyan-text">ONLINE</span></div>
+                <div class="intro-status-line"><span class="status-indicator"></span> NEURAL GEOPATHING: <span class="green-text">SYNCED</span></div>
+                <div class="intro-status-line"><span class="status-indicator"></span> GEMINI 3.6 REASONING: <span class="purple-text">ARMED</span></div>
+            </div>
+
+            <button id="enterCommandCenterBtn" class="enter-btn">
+                <span class="btn-glitch-text">INITIALIZE COMMAND CENTER</span>
+                <i class="fa-solid fa-angles-right"></i>
+            </button>
+        </div>
+    </div>
+
     <!-- Animated Cyber Grid & Canvas Particles -->
     <canvas id="bgCanvas"></canvas>
 
